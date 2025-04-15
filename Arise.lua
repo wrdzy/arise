@@ -1,4 +1,4 @@
-local HttpService = game:GetService("HttpService")
+--loadstring(game:HttpGet("https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua"))()
 
 local BlacklistedPlayers = {
     548245499,
@@ -25,8 +25,19 @@ local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/d
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 local Version = "Final"
 
+-- ====== PERSISTENCE MECHANISM ======
+-- Constants for configuration management
+local CONFIGURATION = {
+    FOLDER_NAME = "CROW",
+    SCRIPT_URL = "https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua",
+    FILE_EXTENSION = ".lua"
+}
+
+
+
+
 if _G.Interface == nil then
--- _G.Interface = true
+_G.Interface = true
 
 local TeleportService = game:GetService("TeleportService")
 local Players = game:GetService("Players")
@@ -2569,15 +2580,77 @@ miscserver:AddButton({
 
 
 
+-- Implementation for script persistence with teleport queueing
+local function implementPersistentScript()
+    -- Step 1: Validate environment and prepare filesystem
+    if not isfolder(CONFIGURATION.FOLDER_NAME) then
+        local success, errorMessage = pcall(makefolder, CONFIGURATION.FOLDER_NAME)
+        
+        if not success then
+            warn("[ERROR] Failed to create directory structure: " .. tostring(errorMessage))
+            return false
+        end
+    end
+    
+    -- Step 2: Generate target filepath using game ID
+    local currentGameId = tostring(game.PlaceId)
+    local targetFilePath = CONFIGURATION.FOLDER_NAME .. "/" .. currentGameId .. CONFIGURATION.FILE_EXTENSION
+    
+    -- Step 3: Prepare script content with loadstring
+    local scriptContent = [[
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua"))()
+    ]]
+    
+    -- Step 4: Write file with error handling
+    local writeSuccess, writeError = pcall(function()
+        writefile(targetFilePath, scriptContent)
+    end)
+    
+    if not writeSuccess then
+        warn("[ERROR] Failed to write script file: " .. tostring(writeError))
+        return false
+    end
+    
+    -- Step 5: Prepare teleport queue script that will execute after teleport
+    local teleportScript = [[
+        -- Wait for game to load properly
+        if not game:IsLoaded() then
+            game.Loaded:Wait()
+        end
+        
+        -- Small delay to ensure services are available
+        task.wait(1)
+        
+        -- Execute the Arise script
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua"))()
+        
+        -- Re-queue for future teleports
+        queue_on_teleport([=[
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua"))()
+            loadstring(readfile("]=] .. targetFilePath .. [=["))()
+        ]=])
+    ]]
+    
+    -- Step 6: Queue the teleport script
+    local queueSuccess, queueError = pcall(function()
+        queue_on_teleport(teleportScript)
+    end)
+    
+    if not queueSuccess then
+        warn("[ERROR] Failed to queue script for teleport: " .. tostring(queueError))
+        return false
+    end
+    
+    -- Step 7: Return operation results
+    return {
+        success = true,
+        filePath = targetFilePath,
+        gameId = currentGameId,
+        message = "Script successfully saved and queued for teleport persistence"
+    }
+end
 
-
-
-
-
-
-
-
-
+-- ====== UI CONFIGURATION SECTION ======
 -- Addons:
 -- SaveManager (Allows you to have a configuration system)
 -- InterfaceManager (Allows you to have a interface managment system)
@@ -2602,7 +2675,6 @@ SaveManager:SetFolder("CROW/specific-game")
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
-
 Window:SelectTab(1)
 
 Fluent:Notify({
@@ -2614,4 +2686,29 @@ Fluent:Notify({
 -- You can use the SaveManager:LoadAutoloadConfig() to load a config
 -- which has been marked to be one that auto loads!
 SaveManager:LoadAutoloadConfig()
+
+-- ====== EXECUTE PERSISTENCE MECHANISM ======
+-- Execute implementation and handle result
+local result = implementPersistentScript()
+
+-- Provide execution feedback
+if result and result.success then
+    print("[SUCCESS] Script persistence enabled")
+    print("[INFO] File saved to: " .. result.filePath)
+    print("[INFO] Current game ID: " .. result.gameId)
+    
+    Fluent:Notify({
+        Title = "Persistence System",
+        Content = "Script persistence enabled",
+        Duration = 5
+    })
+else
+    warn("[ERROR] Failed to implement script persistence")
+    
+    Fluent:Notify({
+        Title = "Persistence System",
+        Content = "Failed to enable script persistence",
+        Duration = 5
+    })
+end
 end
