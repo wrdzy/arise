@@ -767,7 +767,7 @@ local autoclose = secautogeneral:AddToggle("automob", {
 })
 
 autoclose:OnChanged(function()
-    if automob.Value then
+    if autoclose.Value then
         if farmRunning then return end
         farmRunning = true
         farmThread = task.spawn(runAutofarm)
