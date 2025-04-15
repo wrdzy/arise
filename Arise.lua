@@ -1165,7 +1165,7 @@ end)
     local function interactWithMountPrompt(mount)
         local prompt = mount:FindFirstChildWhichIsA("ProximityPrompt", true)
         if prompt then
-            task.wait(2)
+            task.wait(3)
             fireproximityprompt(prompt)
         end
     end
