@@ -481,7 +481,6 @@ end
 
 
 
-local setspawn = Tabs.World:AddSection("Spawn")
 
 
 -- Function to populate dropdown with spawn point names and custom locations
@@ -504,7 +503,7 @@ end
 
 
 -- Create dropdown with initial values
-local spawndrop = setspawn:AddDropdown("spawndrop", {
+local spawndrop = Teleport:AddDropdown("spawndrop", {
     Title = "Set Spawn:",
     Values = PopulateSpawnDropdown(),
     Multi = false,
@@ -2647,27 +2646,45 @@ miscserver:AddButton({
 
 
 
-
 -- Implementation for script persistence with teleport queueing
 local function implementPersistentScript()
-    -- Step 1: Validate environment and prepare filesystem
+    -- Step 1: Validate environment and prepare main folder
     if not isfolder(CONFIGURATION.FOLDER_NAME) then
         local success, errorMessage = pcall(makefolder, CONFIGURATION.FOLDER_NAME)
         
         if not success then
-            warn("[ERROR] Failed to create directory structure: " .. tostring(errorMessage))
+            warn("[ERROR] Failed to create main directory structure: " .. tostring(errorMessage))
             return false
         end
     end
     
-    -- Step 2: Generate target filepath using game ID
+    -- Step 2: Get current game name and ID
     local currentGameId = tostring(game.PlaceId)
-    local targetFilePath = CONFIGURATION.FOLDER_NAME .. "/" .. currentGameId .. CONFIGURATION.FILE_EXTENSION
+    local currentGameName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
     
-    -- Step 3: Prepare script content with proper variable reference
+    -- Sanitize game name to be folder-friendly (remove special characters)
+    local sanitizedGameName = currentGameName:gsub("[^%w%s_-]", ""):gsub("%s+", "_")
+    
+    -- Create game-specific folder using game name
+    local gameSpecificFolder = CONFIGURATION.FOLDER_NAME .. "/" .. sanitizedGameName
+    
+    -- Create game-specific folder if it doesn't exist
+    if not isfolder(gameSpecificFolder) then
+        local success, errorMessage = pcall(makefolder, gameSpecificFolder)
+        
+        if not success then
+            warn("[ERROR] Failed to create game-specific directory: " .. tostring(errorMessage))
+            return false
+        end
+    end
+    
+    -- Step 3: Generate target filepath using game ID for the filename in the game name folder
+    local targetFilePath = gameSpecificFolder .. "/" .. currentGameId .. CONFIGURATION.FILE_EXTENSION
+    
+    -- Step 4: Prepare script content with proper variable reference
     local scriptContent = "loadstring(game:HttpGet(\"" .. CONFIGURATION.SCRIPT_URL .. "\"))()"
     
-    -- Step 4: Write file with error handling
+    -- Step 5: Write file with error handling
     local writeSuccess, writeError = pcall(function()
         writefile(targetFilePath, scriptContent)
     end)
@@ -2677,7 +2694,7 @@ local function implementPersistentScript()
         return false
     end
     
-    -- Step 5: Prepare teleport queue script that will execute after teleport
+    -- Step 6: Prepare teleport queue script that will execute after teleport
     local teleportScript = [[
         -- Wait for game to load properly
         if not game:IsLoaded() then
@@ -2697,7 +2714,7 @@ local function implementPersistentScript()
         ]=])
     ]]
     
-    -- Step 6: Queue the teleport script
+    -- Step 7: Queue the teleport script
     local queueSuccess, queueError = pcall(function()
         queue_on_teleport(teleportScript)
     end)
@@ -2707,11 +2724,13 @@ local function implementPersistentScript()
         return false
     end
     
-    -- Step 7: Return operation results
+    -- Step 8: Return operation results
     return {
         success = true,
         filePath = targetFilePath,
         gameId = currentGameId,
+        gameName = currentGameName,
+        gameFolder = gameSpecificFolder,
         message = "Script successfully saved and queued for teleport persistence"
     }
 end
@@ -2762,6 +2781,8 @@ if result and result.success then
     print("[SUCCESS] Script persistence enabled")
     print("[INFO] File saved to: " .. result.filePath)
     print("[INFO] Current game ID: " .. result.gameId)
+    print("[INFO] Current game name: " .. result.gameName)
+    print("[INFO] Game folder: " .. result.gameFolder)
     
     Fluent:Notify({
         Title = "Persistence System",
