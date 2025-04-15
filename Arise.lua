@@ -25,13 +25,7 @@ local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/d
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 local Version = "Final"
 
--- ====== PERSISTENCE MECHANISM ======
--- Constants for configuration management
-local CONFIGURATION = {
-    FOLDER_NAME = "CROW",
-    SCRIPT_URL = "https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua",
-    FILE_EXTENSION = ".lua"
-}
+
 
 
 
@@ -119,7 +113,7 @@ end
         Description = "",
         Default = basespeed,
         Min = basespeed,
-        Max = basespeed * 10,
+        Max = basespeed * 240,
         Rounding = 0,
         Callback = function(Value)
             humanoid.WalkSpeed = Value
@@ -2571,10 +2565,13 @@ miscserver:AddButton({
 
 
 
-
-
-
-
+-- ====== PERSISTENCE MECHANISM ======
+-- Constants for configuration management
+local CONFIGURATION = {
+    FOLDER_NAME = "CROW",
+    SCRIPT_URL = "https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua",
+    FILE_EXTENSION = ".lua"
+}
 
 -- Implementation for script persistence with teleport queueing
 local function implementPersistentScript()
@@ -2592,10 +2589,8 @@ local function implementPersistentScript()
     local currentGameId = tostring(game.PlaceId)
     local targetFilePath = CONFIGURATION.FOLDER_NAME .. "/" .. currentGameId .. CONFIGURATION.FILE_EXTENSION
     
-    -- Step 3: Prepare script content with loadstring
-    local scriptContent = [[
-        loadstring(game:HttpGet(SCRIPT_URL))()
-    ]]
+    -- Step 3: Prepare script content with proper variable reference
+    local scriptContent = "loadstring(game:HttpGet(\"" .. CONFIGURATION.SCRIPT_URL .. "\"))()"
     
     -- Step 4: Write file with error handling
     local writeSuccess, writeError = pcall(function()
@@ -2618,11 +2613,11 @@ local function implementPersistentScript()
         task.wait(1)
         
         -- Execute the Arise script
-        loadstring(game:HttpGet(SCRIPT_URL))()
+        loadstring(game:HttpGet("]] .. CONFIGURATION.SCRIPT_URL .. [["))()
         
         -- Re-queue for future teleports
         queue_on_teleport([=[
-            loadstring(game:HttpGet(SCRIPT_URL))()
+            loadstring(game:HttpGet("]] .. CONFIGURATION.SCRIPT_URL .. [["))()
             loadstring(readfile("]=] .. targetFilePath .. [=["))()
         ]=])
     ]]
