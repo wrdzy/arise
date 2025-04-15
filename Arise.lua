@@ -564,9 +564,7 @@ end)
 
 
 
-    local secautogeneral = Tabs.Autofarm:AddSection("Global")
-
-
+local secautogeneral = Tabs.Autofarm:AddSection("Global")
 
 -- Auto Hit
 local autohit = secautogeneral:AddToggle("autohit", {Title = "Auto Hit", Default = false})
@@ -621,34 +619,20 @@ autohit:OnChanged(function()
     end
 end)
 
-
-
-
--- Function to check if the enemy is valid
-local function isValidTarget(enemy)
+-- Function to check if an enemy is valid (has health > 0)
+local function isValidEnemy(enemy)
     local healthBar = enemy:FindFirstChild("HealthBar")
     local main = healthBar and healthBar:FindFirstChild("Main")
-    local title = main and main:FindFirstChild("Title")
     local bar = main and main:FindFirstChild("Bar")
     local amount = bar and bar:FindFirstChild("Amount")
-    local avatar = main and main:FindFirstChild("Avatar")
-    local levelText = avatar and avatar:FindFirstChild("LevelText")
 
-    if not (title and amount) then return false end
-    if not amount:IsA("TextLabel") or not title:IsA("TextLabel") then return false end
-
+    if not amount or not amount:IsA("TextLabel") then return false end
+    
     local hp = tonumber(string.match(amount.Text, "(%d+)"))
-    if not (hp and hp > 0) then return false end
-    
-    -- Get enemy group key based only on name and level (ignoring health)
-    local name = title.Text
-    local level = levelText and levelText:IsA("TextLabel") and levelText.Text or "Unknown"
-    local groupKey = name .. " [Lv." .. level .. "]"
-    
-    return table.find(selectedEnemies, groupKey)
+    return hp and hp > 0
 end
 
--- Trigger the attack event to target the enemy
+-- Trigger the attack event to target any enemy
 local function triggerAttack(enemy)
     local player = game.Players.LocalPlayer
     local userId = tostring(player.UserId)
@@ -694,8 +678,8 @@ local function triggerAttack(enemy)
     return true
 end
 
--- Find and attack the closest valid enemy
-local function attackClosestEnemy()
+-- Find and attack the closest valid enemy for global autofarm
+local function attackClosestEnemyGlobal()
     local player = game.Players.LocalPlayer
     local char = player.Character or player.CharacterAdded:Wait()
     local humanoidRootPart = char:WaitForChild("HumanoidRootPart")
@@ -704,12 +688,12 @@ local function attackClosestEnemy()
     local closestEnemy = nil
     local closestDistance = math.huge
     
-    -- Find the closest valid enemy
+    -- Find the closest valid enemy (any enemy with health > 0)
     for _, enemy in ipairs(workspace.__Main.__Enemies.Client:GetChildren()) do
-        if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
+        if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") and isValidEnemy(enemy) then
             local distance = (enemy.HumanoidRootPart.Position - playerPosition).Magnitude
             
-            if distance < closestDistance and isValidTarget(enemy) then
+            if distance < closestDistance then
                 closestDistance = distance
                 closestEnemy = enemy
             end
@@ -723,9 +707,7 @@ local function attackClosestEnemy()
         -- Attack the enemy
         triggerAttack(closestEnemy)
         
-        -- Wait until enemy is defeated or timeout
-        local startTime = tick()
-        while closestEnemy:FindFirstChild("HealthBar") and tick() - startTime < 10 do
+        while closestEnemy:FindFirstChild("HealthBar")  do
             local healthBar = closestEnemy.HealthBar:FindFirstChild("Main")
             local amount = healthBar and healthBar:FindFirstChild("Bar") and healthBar.Bar:FindFirstChild("Amount")
             
@@ -734,7 +716,7 @@ local function attackClosestEnemy()
                 if not health or health <= 0 then break end
             end
             
-            task.wait(1)
+            task.wait()
         end
         
         return true
@@ -743,24 +725,18 @@ local function attackClosestEnemy()
     return false
 end
 
--- Autofarm loop
-local function runAutofarm()
-    while farmRunning do
-        if #selectedEnemies > 0 then
-            attackClosestEnemy()
-            task.wait(0.5)
-        else
-            task.wait(1)
-        end
+-- Autofarm loop for global (any enemy)
+local globalFarmRunning = false
+local globalFarmThread = nil
+
+local function runGlobalAutofarm()
+    while globalFarmRunning do
+        attackClosestEnemyGlobal()
+        task.wait(0.5)
     end
 end
 
--- Variables and toggle setup
-local selectedEnemies = {}
-local farmRunning = false
-local farmThread = nil
-
--- Toggle to run autofarm
+-- Toggle to run global autofarm (any enemy)
 local autoclose = secautogeneral:AddToggle("automob", {
     Title = "Autofarm Closest Mobs",
     Default = false
@@ -768,19 +744,17 @@ local autoclose = secautogeneral:AddToggle("automob", {
 
 autoclose:OnChanged(function()
     if autoclose.Value then
-        if farmRunning then return end
-        farmRunning = true
-        farmThread = task.spawn(runAutofarm)
+        if globalFarmRunning then return end
+        globalFarmRunning = true
+        globalFarmThread = task.spawn(runGlobalAutofarm)
     else
-        farmRunning = false
-        if farmThread then
-            task.cancel(farmThread)
-            farmThread = nil
+        globalFarmRunning = false
+        if globalFarmThread then
+            task.cancel(globalFarmThread)
+            globalFarmThread = nil
         end
     end
 end)
-
-
 
 -- Auto Arise
 local autoarise = secautogeneral:AddToggle("autoarise", {Title = "Auto Arise", Default = false})
@@ -899,292 +873,222 @@ autodestroy:OnChanged(function()
     end
 end)
 
+-- Dropdown UI setup for specific mob selection
+local secautofarm = Tabs.Autofarm:AddSection("Mobs")
 
+local selectedEnemies = {}
+local currentMobGroups = {}
+local detectionRange = 1000  -- Increased detection range significantly
+local MobDrop = secautofarm:AddDropdown("MobDrop", {
+    Title = "Choose Mobs to Farm",
+    Values = {},
+    Multi = true,
+    Default = {},
+})
 
+-- Function to check if the enemy is a selected target
+local function isValidTarget(enemy)
+    local healthBar = enemy:FindFirstChild("HealthBar")
+    local main = healthBar and healthBar:FindFirstChild("Main")
+    local title = main and main:FindFirstChild("Title")
+    local bar = main and main:FindFirstChild("Bar")
+    local amount = bar and bar:FindFirstChild("Amount")
+    local avatar = main and main:FindFirstChild("Avatar")
+    local levelText = avatar and avatar:FindFirstChild("LevelText")
 
+    if not (title and amount) then return false end
+    if not amount:IsA("TextLabel") or not title:IsA("TextLabel") then return false end
 
-
-
-
-
-
-
-
-
-
-
-    -- Dropdown UI setup
-    local secautofarm = Tabs.Autofarm:AddSection("Mobs")
-
-
-
-
-    local selectedEnemies = {}
-    local currentMobGroups = {}
-    local detectionRange = 1000  -- Increased detection range significantly
+    local hp = tonumber(string.match(amount.Text, "(%d+)"))
+    if not (hp and hp > 0) then return false end
     
+    -- Get enemy group key based only on name and level (ignoring health)
+    local name = title.Text
+    local level = levelText and levelText:IsA("TextLabel") and levelText.Text or "Unknown"
+    local groupKey = name .. " [Lv." .. level .. "]"
+    
+    return table.find(selectedEnemies, groupKey)
+end
 
+-- Teleport the player to a randomly selected enemy from the selection list
+local function teleportToRandomEnemy()
+    local validEnemies = {}
     
-    -- Function to check if the enemy is valid
-    local function isValidTarget(enemy)
-        local healthBar = enemy:FindFirstChild("HealthBar")
-        local main = healthBar and healthBar:FindFirstChild("Main")
-        local title = main and main:FindFirstChild("Title")
-        local bar = main and main:FindFirstChild("Bar")
-        local amount = bar and bar:FindFirstChild("Amount")
-        local avatar = main and main:FindFirstChild("Avatar")
-        local levelText = avatar and avatar:FindFirstChild("LevelText")
+    -- Collect all valid enemies in the expanded detection range
+    for _, enemy in ipairs(workspace.__Main.__Enemies.Client:GetChildren()) do
+        if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
+            local player = game.Players.LocalPlayer
+            local char = player.Character or player.CharacterAdded:Wait()
+            local distance = (enemy.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
+            
+            -- Check if enemy is within the detection range and is a selected target
+            if distance <= detectionRange and isValidTarget(enemy) then
+                table.insert(validEnemies, enemy)
+            end
+        end
+    end
+
+    if #validEnemies == 0 then return false end
+
+    local targetEnemy = validEnemies[math.random(1, #validEnemies)]
+
+    local player = game.Players.LocalPlayer
+    local char = player.Character or player.CharacterAdded:Wait()
+    local humanoidRootPart = char:WaitForChild("HumanoidRootPart")
+    local targetRootPart = targetEnemy:FindFirstChild("HumanoidRootPart")
+
+    if targetRootPart then
+        char.HumanoidRootPart.Anchored = true
+
+        local targetPosition = targetRootPart.Position + Vector3.new(5, 0, 0)
+        local currentPosition = humanoidRootPart.Position
+        local lerpDuration = 1
+        local startTime = tick()
+
+        local function lerpToPosition()
+            local elapsedTime = tick() - startTime
+            local lerpFactor = math.min(elapsedTime / lerpDuration, 1)
+            humanoidRootPart.CFrame = CFrame.new(currentPosition:Lerp(targetPosition, lerpFactor))
+
+            if lerpFactor < 1 then
+                task.wait(0.03)
+                lerpToPosition()
+            else
+                char.HumanoidRootPart.Anchored = false
+                triggerAttack(targetEnemy)
+            end
+        end
+
+        lerpToPosition()
+
+        while targetEnemy:FindFirstChild("HealthBar") and targetEnemy.HealthBar:FindFirstChild("Main") do
+            local healthBar = targetEnemy.HealthBar.Main
+            local amount = healthBar:FindFirstChild("Bar") and healthBar.Bar:FindFirstChild("Amount")
+
+            if amount and amount:IsA("TextLabel") then
+                local health = tonumber(string.match(amount.Text, "(%d+)"))
+                if health and health <= 0 then break end
+            end
+
+            task.wait()
+        end
+    end
+
+    return true
+end
+
+-- Autofarm loop for selected mobs
+local selectedFarmRunning = false
+local selectedFarmThread = nil
+
+local function runSelectedAutofarm()
+    while selectedFarmRunning do
+        if #selectedEnemies > 0 then
+            teleportToRandomEnemy()
+            task.wait()
+        else
+            task.wait(1)
+        end
+    end
+end
+
+-- Function to get enemy level and name from health bar
+local function getEnemyLevelAndName(enemy)
+    local healthBar = enemy:FindFirstChild("HealthBar")
+    local main = healthBar and healthBar:FindFirstChild("Main")
+    local title = main and main:FindFirstChild("Title")
+    local avatar = main and main:FindFirstChild("Avatar")
+    local levelText = avatar and avatar:FindFirstChild("LevelText")
     
-        if not (title and amount) then return false end
-        if not amount:IsA("TextLabel") or not title:IsA("TextLabel") then return false end
-    
-        local hp = tonumber(string.match(amount.Text, "(%d+)"))
-        if not (hp and hp > 0) then return false end
-        
-        -- Get enemy group key based only on name and level (ignoring health)
+    if title and title:IsA("TextLabel") then
         local name = title.Text
-        local level = levelText and levelText:IsA("TextLabel") and levelText.Text or "Unknown"
+        local level = "Unknown"
+        
+        if levelText and levelText:IsA("TextLabel") then
+            level = levelText.Text
+        end
+        
+        -- Create a group key based on the enemy name and level only
         local groupKey = name .. " [Lv." .. level .. "]"
         
-        return table.find(selectedEnemies, groupKey)
+        return {
+            name = name,
+            level = level,
+            groupKey = groupKey
+        }
     end
     
-    -- Trigger the attack event to target the enemy
-    local function triggerAttack(enemy)
-        local player = game.Players.LocalPlayer
-        local userId = tostring(player.UserId)
-        local userFolder = workspace.__Main.__Pets:FindFirstChild(userId)
-        if not userFolder then return false end
+    return nil
+end
+
+-- Function to get all enemy types and update dropdown
+local function updateMobDropdown()
+    local enemyTypes = {}
+    local seen = {}
     
-        local currentPos = player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character.HumanoidRootPart.Position
-        if not currentPos then return false end
-    
-        local offset = 5
-    
-        -- Loop through all pets and fire one event per pet
-        for _, pet in ipairs(userFolder:GetChildren()) do
-            local petPos = {}
-    
-            -- Calculate pet position relative to the player's position
-            petPos[pet.Name] = Vector3.new(
-                currentPos.X + math.random(-offset, offset),
-                currentPos.Y,
-                currentPos.Z + math.random(-offset, offset)
-            )
-    
-            -- Create the args for the specific pet
-            local args = {
-                [1] = {
-                    [1] = {
-                        ["PetPos"] = petPos,  -- Position of the current pet
-                        ["AttackType"] = "All",  -- Assuming attack type is "All"
-                        ["Event"] = "Attack",
-                        ["Enemy"] = enemy.Name  -- Target enemy
-                    },
-                    [2] = "\t"
-                }
-            }
-    
-            -- Send the event for the specific pet
-            game:GetService("ReplicatedStorage"):WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent"):FireServer(unpack(args))
-            
-            -- Wait a small amount of time before firing the next event
-            task.wait(.8)
-        end
-    
-        return true
-    end
-    
-    
-    
-    
-    
-    -- Teleport the player to a randomly selected enemy using Lerp and trigger attack
-    local function teleportToRandomEnemy()
-        local validEnemies = {}
-        
-        -- Collect all valid enemies in the expanded detection range
-        for _, enemy in ipairs(workspace.__Main.__Enemies.Client:GetChildren()) do
-            if enemy:IsA("Model") and enemy:FindFirstChild("HumanoidRootPart") then
-                local player = game.Players.LocalPlayer
-                local char = player.Character or player.CharacterAdded:Wait()
-                local distance = (enemy.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
-                
-                -- Check if enemy is within the detection range
-                if distance <= detectionRange and isValidTarget(enemy) then
-                    table.insert(validEnemies, enemy)
+    for _, enemy in ipairs(workspace.__Main.__Enemies.Client:GetChildren()) do
+        if enemy:IsA("Model") then
+            local enemyInfo = getEnemyLevelAndName(enemy)
+            if enemyInfo and enemyInfo.groupKey then
+                if not seen[enemyInfo.groupKey] then
+                    table.insert(enemyTypes, enemyInfo.groupKey)
+                    seen[enemyInfo.groupKey] = true
                 end
             end
         end
-    
-        if #validEnemies == 0 then return false end
-    
-        local targetEnemy = validEnemies[math.random(1, #validEnemies)]
-    
-        local player = game.Players.LocalPlayer
-        local char = player.Character or player.CharacterAdded:Wait()
-        local humanoidRootPart = char:WaitForChild("HumanoidRootPart")
-        local targetRootPart = targetEnemy:FindFirstChild("HumanoidRootPart")
-    
-        if targetRootPart then
-            char.HumanoidRootPart.Anchored = true
-    
-            local targetPosition = targetRootPart.Position + Vector3.new(5, 0, 0)
-            local currentPosition = humanoidRootPart.Position
-            local lerpDuration = 1
-            local startTime = tick()
-    
-            local function lerpToPosition()
-                local elapsedTime = tick() - startTime
-                local lerpFactor = math.min(elapsedTime / lerpDuration, 1)
-                humanoidRootPart.CFrame = CFrame.new(currentPosition:Lerp(targetPosition, lerpFactor))
-    
-                if lerpFactor < 1 then
-                    task.wait(0.03)
-                    lerpToPosition()
-                else
-                    char.HumanoidRootPart.Anchored = false
-                    triggerAttack(targetEnemy)
-                end
-            end
-    
-            lerpToPosition()
-    
-            while targetEnemy:FindFirstChild("HealthBar") and targetEnemy.HealthBar:FindFirstChild("Main") do
-                local healthBar = targetEnemy.HealthBar.Main
-                local amount = healthBar:FindFirstChild("Bar") and healthBar.Bar:FindFirstChild("Amount")
-    
-                if amount and amount:IsA("TextLabel") then
-                    local health = tonumber(string.match(amount.Text, "(%d+)"))
-                    if health and health <= 0 then break end
-                end
-    
-                task.wait(1)
-            end
-        end
-    
-        return true
     end
     
-    -- Autofarm loop with slight optimization
-    local function runAutofarm()
-        while farmRunning do
-            if #selectedEnemies > 0 then
-                teleportToRandomEnemy()
-                task.wait()
-            else
-                task.wait(1)
-            end
-        end
-    end
+    table.sort(enemyTypes)
+    currentMobGroups = enemyTypes
     
-    farmRunning = false
-    farmThread = nil
-    
-    automob:OnChanged(function()
-        if automob.Value then
-            if farmRunning then return end
-            farmRunning = true
-            farmThread = task.spawn(runAutofarm)
-        else
-            farmRunning = false
-            if farmThread then
-                task.cancel(farmThread)
-                farmThread = nil
-            end
-        end
-    end)
-    
-    -- Function to get enemy level and name from health bar
-    local function getEnemyLevelAndName(enemy)
-        local healthBar = enemy:FindFirstChild("HealthBar")
-        local main = healthBar and healthBar:FindFirstChild("Main")
-        local title = main and main:FindFirstChild("Title")
-        local avatar = main and main:FindFirstChild("Avatar")
-        local levelText = avatar and avatar:FindFirstChild("LevelText")
-        
-        if title and title:IsA("TextLabel") then
-            local name = title.Text
-            local level = "Unknown"
-            
-            if levelText and levelText:IsA("TextLabel") then
-                level = levelText.Text
-            end
-            
-            -- Create a group key based on the enemy name and level only
-            local groupKey = name .. " [Lv." .. level .. "]"
-            
-            return {
-                name = name,
-                level = level,
-                groupKey = groupKey
-            }
-        end
-        
-        return nil
-    end
-    
-    -- Function to get all enemy types and update dropdown
-    local function updateMobDropdown()
-        local enemyTypes = {}
-        local seen = {}
-        
-        for _, enemy in ipairs(workspace.__Main.__Enemies.Client:GetChildren()) do
-            if enemy:IsA("Model") then
-                local enemyInfo = getEnemyLevelAndName(enemy)
-                if enemyInfo and enemyInfo.groupKey then
-                    if not seen[enemyInfo.groupKey] then
-                        table.insert(enemyTypes, enemyInfo.groupKey)
-                        seen[enemyInfo.groupKey] = true
-                    end
-                end
-            end
-        end
-        
-        table.sort(enemyTypes)
-        currentMobGroups = enemyTypes
-        MobDrop:SetValues(currentMobGroups)
-    end
+    -- Update the dropdown with the new values
+    MobDrop:SetValues(currentMobGroups)
+end
 
 
-    local MobDrop = secautofarm:AddDropdown("MobDrop", {
-        Title = "Choose Mobs to Farm",
-        Values = {},
-        Multi = true,
-        Default = {},
-    })
-    -- Dropdown change listener
-    MobDrop:OnChanged(function(valueTable)
-        selectedEnemies = {}
-        for value, isSelected in pairs(valueTable) do
-            if isSelected then
-                table.insert(selectedEnemies, value)
-            end
-        end
-    end)
-    
-    secautofarm:AddButton({
-        Title = "Refresh Enemy list",
-        Callback = function()
-            updateMobDropdown()
-        end
-    })
 
-    -- Toggle to run autofarm
-    local automob = secautofarm:AddToggle("automob", {
-        Title = "Autofarm Selected Mobs",
-        Default = false
-    })
-    
-    
-    -- Initial update when the script loads
-    task.spawn(function()
-        task.wait(1) -- Allow the game to initialize first
+-- Dropdown change listener
+MobDrop:OnChanged(function(valueTable)
+    selectedEnemies = {}
+    for value, isSelected in pairs(valueTable) do
+        if isSelected then
+            table.insert(selectedEnemies, value)
+        end
+    end
+end)
+
+secautofarm:AddButton({
+    Title = "Refresh Enemy list",
+    Callback = function()
         updateMobDropdown()
-    end)
-    
+    end
+})
 
+-- Toggle to run selected mob autofarm
+local automob = secautofarm:AddToggle("selectedmob", {
+    Title = "Autofarm Selected Mobs",
+    Default = false
+})
 
+automob:OnChanged(function()
+    if automob.Value then
+        if selectedFarmRunning then return end
+        selectedFarmRunning = true
+        selectedFarmThread = task.spawn(runSelectedAutofarm)
+    else
+        selectedFarmRunning = false
+        if selectedFarmThread then
+            task.cancel(selectedFarmThread)
+            selectedFarmThread = nil
+        end
+    end
+end)
+
+-- Initial update when the script loads
+task.spawn(function()
+    task.wait(1) -- Allow the game to initialize first
+    updateMobDropdown()
+end)
  
 
 
