@@ -39,11 +39,6 @@ local CONFIGURATION = {
 if _G.Interface == nil then
 _G.Interface = true
 
-local TeleportService = game:GetService("TeleportService")
-local Players = game:GetService("Players")
-
-
-
 
 
     
@@ -919,7 +914,7 @@ end)
         while farmRunning do
             if #selectedEnemies > 0 then
                 teleportToRandomEnemy()
-                task.wait(1)
+                task.wait()
             else
                 task.wait(1)
             end
@@ -1016,13 +1011,14 @@ end)
         updateMobDropdown()
     end)
     
-    -- Update every 5 seconds
-    task.spawn(function()
-        while true do
-            task.wait(5) -- Update every 5 seconds as requested
+
+    secautofarm:AddButton({
+        Title = "Refresh Enemy list",
+        Callback = function()
             updateMobDropdown()
         end
-    end)
+    })
+ 
 
 
 
@@ -2598,7 +2594,7 @@ local function implementPersistentScript()
     
     -- Step 3: Prepare script content with loadstring
     local scriptContent = [[
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua"))()
+        loadstring(game:HttpGet(SCRIPT_URL))()
     ]]
     
     -- Step 4: Write file with error handling
@@ -2622,11 +2618,11 @@ local function implementPersistentScript()
         task.wait(1)
         
         -- Execute the Arise script
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua"))()
+        loadstring(game:HttpGet(SCRIPT_URL))()
         
         -- Re-queue for future teleports
         queue_on_teleport([=[
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua"))()
+            loadstring(game:HttpGet(SCRIPT_URL))()
             loadstring(readfile("]=] .. targetFilePath .. [=["))()
         ]=])
     ]]
