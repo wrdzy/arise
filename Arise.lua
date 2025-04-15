@@ -25,6 +25,13 @@ local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/d
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 local Version = "Final"
 
+-- ====== PERSISTENCE MECHANISM ======
+local CONFIGURATION = {
+    FOLDER_NAME = "CROW",
+    SCRIPT_URL = "https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua",
+    FILE_EXTENSION = ".lua"
+}
+
 
 
 
@@ -113,7 +120,7 @@ end
         Description = "",
         Default = basespeed,
         Min = basespeed,
-        Max = basespeed * 240,
+        Max = 240,
         Rounding = 0,
         Callback = function(Value)
             humanoid.WalkSpeed = Value
@@ -2565,13 +2572,7 @@ miscserver:AddButton({
 
 
 
--- ====== PERSISTENCE MECHANISM ======
--- Constants for configuration management
-local CONFIGURATION = {
-    FOLDER_NAME = "CROW",
-    SCRIPT_URL = "https://raw.githubusercontent.com/wrdzy/arise/refs/heads/main/Arise.lua",
-    FILE_EXTENSION = ".lua"
-}
+
 
 -- Implementation for script persistence with teleport queueing
 local function implementPersistentScript()
