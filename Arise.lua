@@ -2644,8 +2644,6 @@ miscserver:AddButton({
 
 
 
-
-
 -- Implementation for script persistence with teleport queueing
 local function implementPersistentScript()
     -- Step 1: Validate environment and prepare main folder
@@ -2658,6 +2656,17 @@ local function implementPersistentScript()
         end
     end
     
+    -- Create games folder if it doesn't exist
+    local gamesFolder = CONFIGURATION.FOLDER_NAME .. "/games"
+    if not isfolder(gamesFolder) then
+        local success, errorMessage = pcall(makefolder, gamesFolder)
+        
+        if not success then
+            warn("[ERROR] Failed to create games directory: " .. tostring(errorMessage))
+            return false
+        end
+    end
+    
     -- Step 2: Get current game name and ID
     local currentGameId = tostring(game.PlaceId)
     local currentGameName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
@@ -2666,7 +2675,7 @@ local function implementPersistentScript()
     local sanitizedGameName = currentGameName:gsub("[^%w%s_-]", ""):gsub("%s+", "_")
     
     -- Create game-specific folder using game name
-    local gameSpecificFolder = CONFIGURATION.FOLDER_NAME .. "/" .. sanitizedGameName
+    local gameSpecificFolder = gamesFolder .. "/" .. sanitizedGameName
     
     -- Create game-specific folder if it doesn't exist
     if not isfolder(gameSpecificFolder) then
@@ -2755,12 +2764,12 @@ SaveManager:SetIgnoreIndexes({})
 -- a script hub could have themes in a global folder
 -- and game configs in a separate folder per game
 InterfaceManager:SetFolder("CROW")
-SaveManager:SetFolder("CROW/specific-game")
+SaveManager:SetFolder("CROW/games")
+
+Window:SelectTab(1)
 
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
-
-Window:SelectTab(1)
 
 Fluent:Notify({
     Title = "Interface",
