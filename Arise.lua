@@ -703,6 +703,10 @@ local function attackClosestEnemyGlobal()
     if closestEnemy then
         -- Teleport to the enemy
         char.HumanoidRootPart.CFrame = closestEnemy.HumanoidRootPart.CFrame * CFrame.new(5, 0, 0)
+        task.wait()
+        char.HumanoidRootPart.CFrame = closestEnemy.HumanoidRootPart.CFrame * CFrame.new(5, 0, 0)
+        task.wait()
+        char.HumanoidRootPart.CFrame = closestEnemy.HumanoidRootPart.CFrame * CFrame.new(5, 0, 0)
         
         -- Attack the enemy
         triggerAttack(closestEnemy)
