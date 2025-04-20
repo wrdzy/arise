@@ -1,4 +1,4 @@
---loadstring(game:HttpGet("https://pastes.io/raw/arisescript"))()
+--loadstring(game:HttpGet("https://pastebin.com/raw/Zt4VD4yV"))()
 
 local BlacklistedPlayers = {
     548245499,
@@ -2787,17 +2787,7 @@ local result = implementPersistentScript()
 
 -- Provide execution feedback
 if result and result.success then
-    print("[SUCCESS] Script persistence enabled")
-    print("[INFO] File saved to: " .. result.filePath)
-    print("[INFO] Current game ID: " .. result.gameId)
-    print("[INFO] Current game name: " .. result.gameName)
-    print("[INFO] Game folder: " .. result.gameFolder)
-    
-    Fluent:Notify({
-        Title = "Persistence System",
-        Content = "Script persistence enabled",
-        Duration = 5
-    })
+
 else
     warn("[ERROR] Failed to implement script persistence")
     
